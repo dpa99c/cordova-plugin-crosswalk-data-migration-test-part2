@@ -1,6 +1,12 @@
 var key = "foo";
 var modernAndroid;
-var indexedDB = window.indexedDB || window.webkitIndexedDB, db;
+
+var indexedDB = window.indexedDB || window.webkitIndexedDB;
+
+var db = {
+    indexedDB: {},
+    webSQL: {}
+};
 
 function onDeviceReady(){
     console.log("deviceready");
@@ -18,15 +24,16 @@ function onDeviceReady(){
     }
     $('#os').html(device.version + " (" + (modernAndroid ? "modern" : "old") + ")");
 
-    // Init DB
-    var open = indexedDB.open(key, 1);
-    open.onupgradeneeded = function() {
-        open.result.createObjectStore(key, {keyPath: "id"});
-    };
-    open.onsuccess = function(){
-        db = open.result;
+    // Setup DBs
+    db.indexedDB.setup();
+    db.webSQL.setup();
+}
+
+function onDbIsSetup(){
+    if(db.indexedDB.isSetup && db.webSQL.isSetup){
+        console.log("DBs are setup");
         get();
-    };
+    }
 }
 
 function create(){
@@ -34,21 +41,26 @@ function create(){
     if(modernAndroid){
         $('#cookies').val(generateRandomString());
         $('#indexeddb').val(generateRandomString());
+        $('#websql').val(generateRandomString());
     }
 }
 
 function set(){
     localStorage.setItem(key, $('#local-storage').val());
     writeCookie(key, $('#cookies').val(), 1000);
-    writeToDb($('#indexeddb').val());
+    db.indexedDB.writeToDb($('#indexeddb').val());
+    db.webSQL.writeToDb($('#websql').val());
 }
 
 function get(){
     $('#local-storage').val(localStorage.getItem(key));
 
     $('#cookies').val(readCookie(key));
-    readFromDb(function(val){
+    db.indexedDB.readFromDb(function(val){
         $('#indexeddb').val(val);
+    });
+    db.webSQL.readFromDb(function(val){
+        $('#websql').val(val);
     });
 }
 
@@ -61,7 +73,8 @@ function clear(){
         $('#indexeddb').val('');
 
         writeCookie(key, $('#cookies').val(), -1);
-        clearDb();
+        db.indexedDB.clearDb();
+        db.webSQL.clearDb();
     }
 }
 
@@ -97,32 +110,86 @@ function writeCookie(name, value, days) {
     document.cookie = name+"="+value+expires+"; path=/";
 }
 
-function writeToDb(val){
-    var tx = db.transaction(key, "readwrite");
+db.indexedDB.setup = function(){
+    var open = indexedDB.open(key, 1);
+    open.onupgradeneeded = function() {
+        open.result.createObjectStore(key, {keyPath: "id"});
+    };
+    open.onsuccess = function(){
+        db.indexedDB.db = open.result;
+        db.indexedDB.isSetup = true;
+        onDbIsSetup();
+    };
+};
+
+db.indexedDB.writeToDb = function (val){
+    var tx = db.indexedDB.db.transaction(key, "readwrite");
     var store = tx.objectStore(key);
     var addReq = store.add({id: 1, value: val});
     addReq.onsuccess = function(){
-        console.log("Saved '"+val+"' to DB");
+        console.log("Saved '"+val+"' to indexedDB");
     };
-}
+};
 
-function readFromDb(cb){
-    var tx = db.transaction(key, "readwrite");
+db.indexedDB.readFromDb = function (cb){
+    var tx = db.indexedDB.db.transaction(key, "readwrite");
     var store = tx.objectStore(key);
 
     var getReq = store.get(1);
     getReq.onsuccess = function(){
+        console.log("Read from indexedDB");
         cb(getReq.result && getReq.result.value ? getReq.result.value : "");
     }
-}
+};
 
-function clearDb(){
-    var tx = db.transaction(key, "readwrite");
+db.indexedDB.clearDb = function (){
+    var tx = db.indexedDB.db.transaction(key, "readwrite");
     var store = tx.objectStore(key);
     var clearReq = store.clear();
     clearReq.onsuccess = function(){
-        console.log("DB cleared");
+        console.log("Cleared indexedDB");
     };
-}
+};
+
+db.webSQL.setup = function(){
+    db.webSQL.db = window.openDatabase(key, "0.1", "foo", 1024 * 1024);
+    db.webSQL.db.transaction(function(transaction){
+        transaction.executeSql("CREATE TABLE IF NOT EXISTS "+key+" (" +
+            "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
+            "value TEXT NOT NULL);");
+        db.webSQL.isSetup = true;
+        onDbIsSetup();
+    });
+
+};
+
+db.webSQL.writeToDb = function (val){
+    db.webSQL.db.transaction(function(transaction){
+        transaction.executeSql(("INSERT INTO "+key+" (value) VALUES (?);"),
+            [val], function(transaction, results){
+                console.log("Wrote to WebSQL DB");
+            }, function(){
+                console.error("Failed to write to WebSQL DB");
+            });
+    });
+};
+
+db.webSQL.readFromDb = function (cb){
+    db.webSQL.db.transaction(function(transaction){
+        transaction.executeSql(("SELECT * FROM "+key+" WHERE id=?"), [1],
+            function(transaction, results){
+                cb(results.rows[0].value);
+            }, function(){
+                console.error("Failed to read from WebSQL DB");
+            });
+    });
+};
+
+db.webSQL.clearDb = function (){
+    var query = "DELETE * FROM " + key;
+    db.webSQL.db.transaction(function (tx) {
+        tx.executeSql(query);
+    });
+};
 
 document.addEventListener('deviceready', onDeviceReady, false);
