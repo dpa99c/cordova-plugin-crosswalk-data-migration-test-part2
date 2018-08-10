@@ -10,15 +10,20 @@
   "author": "Apache Cordova Team",
   "license": "Apache-2.0",
   "dependencies": {
+    "cordova-android": "^7.1.1",
+    "cordova-android-support-gradle-release": "^1.4.4",
+    "cordova-plugin-crosswalk-data-migration": "^1.0.0",
     "cordova-plugin-device": "^1.1.7",
-    "cordova-plugin-whitelist": "^1.3.3",
-    "cordova-plugin-crosswalk-data-migration": "^1.0.0"
+    "cordova-plugin-whitelist": "^1.3.3"
   },
   "cordova": {
     "plugins": {
       "cordova-plugin-whitelist": {},
       "cordova-plugin-device": {},
-      "cordova-plugin-crosswalk-data-migration": {}
+      "cordova-plugin-crosswalk-data-migration": {},
+      "cordova-android-support-gradle-release": {
+        "ANDROID_SUPPORT_VERSION": "27.+"
+      }
     },
     "platforms": [
       "android"
